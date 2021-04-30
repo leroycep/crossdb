@@ -1,4 +1,5 @@
 const std = @import("std");
+const deps = @import("deps.zig");
 
 pub fn build(b: *std.build.Builder) void {
     // Standard target options allows the person running `zig build` to choose
@@ -10,6 +11,32 @@ pub fn build(b: *std.build.Builder) void {
     // Standard release options allow the person running `zig build` to select
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const mode = b.standardReleaseOptions();
+
+    const native = b.addExecutable("simple", "examples/simple.zig");
+    native.addPackage(.{
+        .name = "crossdb",
+        .path = "src/main.zig",
+        .dependencies = &.{ deps.pkgs.lmdb },
+    });
+    native.addIncludeDir(deps.base_dirs.lmdb_c ++ "/libraries/liblmdb");
+    native.addCSourceFiles(
+        &.{
+            deps.base_dirs.lmdb_c ++ "/libraries/liblmdb/mdb.c",
+            deps.base_dirs.lmdb_c ++ "/libraries/liblmdb/midl.c",
+        },
+        &.{"-fno-sanitize=undefined"},
+    );
+    native.linkLibC();
+    native.setBuildMode(mode);
+    native.setTarget(target);
+    native.install();
+
+    const build_native = b.step("native", "Build native example");
+    build_native.dependOn(&native.step);
+
+    const native_run = native.run();
+    const native_run_step = b.step("run", "Run native binary");
+    native_run_step.dependOn(&native_run.step);
 
     const web = b.addStaticLibrary("simple", "examples/simple.zig");
     web.addPackagePath("crossdb", "src/main.zig");

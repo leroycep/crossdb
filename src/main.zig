@@ -4,6 +4,8 @@ const builtin = @import("builtin");
 pub const CrossDBError = error{
     Unimplemented,
     CannotOpen,
+    VersionTooLarge,
+    UpgradeFailed,
     UnknownStore,
 };
 
