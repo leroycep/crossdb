@@ -1,0 +1,7 @@
+pkgs:
+  crossdb:
+    version: 0.0.0
+    files:
+      src/*.zig
+      src/crossdb.js
+    deps:

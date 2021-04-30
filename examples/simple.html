@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+
+        <title>Simple</title>
+        <style>
+            body {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                background: #444;
+                color: #98ffb1;
+            }
+        </style>
+        <script type="module" defer="true">
+            import getCrossDBEnv from "./crossdb.js";
+
+            var globalInstance;
+
+            const utf8decoder = new TextDecoder();
+            let log_string = "";
+
+            let imports = {
+                crossdb: getCrossDBEnv(() => globalInstance),
+                env: {
+                    log_write: (ptr, len) => {
+                        log_string += utf8decoder.decode(
+                            new Uint8Array(globalInstance.exports.memory.buffer, ptr, len)
+                        );
+                    },
+                    log_flush: () => {
+                        console.log(log_string);
+                        log_string = "";
+                    },
+                },
+            };
+
+            fetch("simple.wasm")
+                .then((response) => response.arrayBuffer())
+                .then((bytes) => WebAssembly.instantiate(bytes, imports))
+                .then((results) => results.instance)
+                .then((instance) => {
+                    globalInstance = instance;
+                    instance.exports._start();
+                });
+        </script>
+    </head>
+
+    <body></body>
+</html>
