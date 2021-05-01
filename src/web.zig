@@ -7,23 +7,36 @@ const StoreOptions = crossdb.StoreOptions;
 const TransactionOptions = crossdb.TransactionOptions;
 
 pub const Database = struct {
+    allocator: *std.mem.Allocator,
     web_db: *bindings.WebDatabase,
+    options: OpenOptions,
 
-    pub fn open(name: []const u8, options: OpenOptions) CrossDBError!@This() {
+    pub fn open(allocator: *std.mem.Allocator, appName: []const u8, name: []const u8, options: OpenOptions) CrossDBError!@This() {
+        const db_name = std.fmt.allocPrint(allocator, "{s}_{s}", .{ appName, name }) catch return error.Unknown;
+        defer allocator.free(db_name);
+
+        var this = @This(){
+            .allocator = allocator,
+            .options = options,
+            .web_db = undefined,
+        };
+
         var dbhandle: ?*bindings.WebDatabase = null;
-        suspend bindings.databaseOpen(name.ptr, name.len, @intCast(u32, options.version), @ptrToInt(@frame()), @ptrToInt(&options), &dbhandle);
+        suspend bindings.databaseOpen(db_name.ptr, db_name.len, @intCast(u32, options.version), @ptrToInt(@frame()), @ptrToInt(&this), &dbhandle);
         if (dbhandle) |handle| {
-            return @This(){
-                .web_db = handle,
-            };
+            this.web_db = handle;
+            return this;
         } else {
             return error.CannotOpen;
         }
     }
 
-    pub fn delete(name: []const u8) CrossDBError!void {
+    pub fn delete(allocator: *std.mem.Allocator, appName: []const u8, name: []const u8) CrossDBError!void {
+        const db_name = std.fmt.allocPrint(allocator, "{s}_{s}", .{ appName, name }) catch return error.Unknown;
+        defer allocator.free(db_name);
+
         // TODO: Listen for errors
-        bindings.databaseDelete(name.ptr, name.len);
+        bindings.databaseDelete(db_name.ptr, db_name.len);
     }
 
     pub fn begin(this: *@This(), storeNames: []const []const u8, options: TransactionOptions) CrossDBError!Transaction {
@@ -35,7 +48,7 @@ pub const Database = struct {
 
         const res = bindings.databaseBegin(this.web_db, store_name_list);
         if (res) |txn| {
-            return Transaction{ .web_txn = txn };
+            return Transaction{ .allocator = this.allocator, .web_txn = txn };
         } else {
             return error.UnknownStore;
         }
@@ -47,6 +60,7 @@ pub const Database = struct {
 };
 
 pub const Transaction = struct {
+    allocator: *std.mem.Allocator,
     web_txn: *bindings.WebTransaction,
 
     pub fn commit(this: *@This()) CrossDBError!void {
@@ -55,7 +69,7 @@ pub const Transaction = struct {
 
     pub fn store(this: *@This(), storeName: []const u8) CrossDBError!Store {
         if (bindings.transactionStore(this.web_txn, storeName.ptr, storeName.len)) |store_handle| {
-            return Store{ .web_store = store_handle };
+            return Store{ .allocator = this.allocator, .web_store = store_handle };
         } else {
             return error.UnknownStore;
         }
@@ -68,13 +82,22 @@ pub const Transaction = struct {
 
 pub const Store = struct {
     web_store: *bindings.WebStore,
+    allocator: *std.mem.Allocator,
+    val_out: ?[]u8 = null,
 
-    // TODO: Replace with interface that uses allocation
-    valOut: [1024]u8 = undefined,
+    pub fn init(allocator: *std.mem.Allocator, store: *bindings.WebStore) !void {
+        return @This(){
+            .allocator = allocator,
+            .web_store = store,
+        };
+    }
 
     /// Remove handle to this store
     pub fn release(this: @This()) void {
         bindings.storeRelease(this.web_store);
+        if (this.val_out) |val_out| {
+            this.allocator.free(val_out);
+        }
     }
 
     pub fn put(this: *@This(), key: []const u8, value: []const u8) CrossDBError!void {
@@ -82,19 +105,21 @@ pub const Store = struct {
     }
 
     pub fn get(this: *@This(), key: []const u8) CrossDBError!?[]const u8 {
-        var val: ?[]const u8 = undefined;
-        suspend bindings.storeGet(this.web_store, @ptrToInt(@frame()), key.ptr, key.len, &val, &this.valOut, this.valOut.len);
+        if (this.val_out) |val_out| {
+            this.allocator.free(val_out);
+        }
+        var val: ?[]u8 = undefined;
+        suspend bindings.storeGet(this.web_store, @ptrToInt(@frame()), key.ptr, key.len, this.allocator, &val);
+        this.val_out = val;
         return val;
     }
 };
 
 export fn crossdb_upgradeNeeded(userdata: usize, database: *bindings.WebDatabase, oldVersion: u32, newVersion: u32) callconv(.C) void {
-    const options = @intToPtr(*const OpenOptions, userdata);
-    var db = Database{
-        .web_db = database,
-    };
+    const db = @intToPtr(*Database, userdata);
+    db.web_db = database;
 
-    return options.onupgrade(&db, oldVersion, newVersion) catch |err| {
+    return db.options.onupgrade(db, oldVersion, newVersion) catch |err| {
         std.log.err("Error upgrading: {}", .{err});
         unreachable;
     };
@@ -107,7 +132,12 @@ export fn crossdb_finishOpen(framePtr: usize, userdata: usize, dbout: *?*binding
     resume frame;
 }
 
-export fn crossdb_finish_storeGet(framePtr: usize, valout: *?[]const u8, valPtrOpt: ?[*]const u8, valLen: usize) void {
+export fn crossdb_alloc(allocator: *std.mem.Allocator, byteLen: usize) ?[*]u8 {
+    const slice = allocator.alloc(u8, byteLen) catch return null;
+    return slice.ptr;
+}
+
+export fn crossdb_finish_storeGet(framePtr: usize, valout: *?[]u8, valPtrOpt: ?[*]u8, valLen: usize) void {
     if (valPtrOpt) |valPtr| {
         valout.* = valPtr[0..valLen];
     } else {
@@ -143,5 +173,5 @@ const bindings = struct {
     const WebStore = opaque {};
     extern "crossdb" fn storeRelease(store: *WebStore) void;
     extern "crossdb" fn storePut(store: *WebStore, keyPtr: [*]const u8, keyLen: usize, valPtr: [*]const u8, valLen: usize) void;
-    extern "crossdb" fn storeGet(store: *WebStore, framePtr: usize, keyPtr: [*]const u8, keyLen: usize, valOut: *?[]const u8, valPtr: [*]const u8, valLen: usize) void;
+    extern "crossdb" fn storeGet(store: *WebStore, framePtr: usize, keyPtr: [*]const u8, keyLen: usize, allocator: *std.mem.Allocator, valOut: *?[]u8) void;
 };

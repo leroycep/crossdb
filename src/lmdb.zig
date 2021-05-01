@@ -9,40 +9,48 @@ const StoreOptions = crossdb.StoreOptions;
 const TransactionOptions = crossdb.TransactionOptions;
 
 pub const Database = struct {
+    allocator: *std.mem.Allocator,
     env: lmdb.Environment,
     metaDB: lmdb.Database,
 
-    pub fn open(name: [:0]const u8, options: OpenOptions) CrossDBError!@This() {
+    pub fn open(allocator: *std.mem.Allocator, appName: []const u8, name: []const u8, options: OpenOptions) CrossDBError!@This() {
+        const app_data_dir = std.fs.getAppDataDir(allocator, appName) catch return error.Unknown;
+        defer allocator.free(app_data_dir);
+
+        const path = std.fs.path.join(allocator, &.{ app_data_dir, name }) catch return error.Unknown;
+        defer allocator.free(path);
+
         const cwd = std.fs.cwd();
-        cwd.makePath(name) catch unreachable;
+        cwd.makePath(path) catch return error.CannotOpen;
 
         // TODO: Patch lmdb-zig to make list of possible errors explicit
-        const env = lmdb.Environment.init(name, .{
+        const env = lmdb.Environment.init(path, .{
             .max_num_dbs = 50,
-        }) catch unreachable;
+        }) catch return error.CannotOpen;
 
         const metaDB = get_metaDB: {
-            const txn = env.begin(.{}) catch unreachable;
+            const txn = env.begin(.{}) catch return error.CannotOpen;
             errdefer txn.deinit();
 
-            const metaDB = txn.use("__crossdb_meta", .{ .create_if_not_exists = true }) catch unreachable;
+            const metaDB = txn.use("__crossdb_meta", .{ .create_if_not_exists = true }) catch return error.CannotOpen;
             txn.commit() catch unreachable;
 
             break :get_metaDB metaDB;
         };
 
         var this = @This(){
+            .allocator = allocator,
             .env = env,
             .metaDB = metaDB,
         };
 
         const version = get_version: {
-            const txn = env.begin(.{ .read_only = true }) catch unreachable;
+            const txn = env.begin(.{ .read_only = true }) catch return error.CannotOpen;
             defer txn.deinit();
 
             const version_bytes = txn.get(metaDB, "version") catch |err| switch (err) {
                 error.NotFound => break :get_version 0,
-                else => |e| unreachable,
+                else => return error.CannotOpen,
             };
             break :get_version std.mem.readIntBig(u32, version_bytes[0..4]);
         };
@@ -53,7 +61,7 @@ pub const Database = struct {
             var version_bytes: [4]u8 = undefined;
             std.mem.writeIntBig(u32, &version_bytes, options.version);
 
-            const txn = env.begin(.{}) catch unreachable;
+            const txn = env.begin(.{}) catch return error.CannotOpen;
             defer txn.deinit();
             txn.put(metaDB, "version", &version_bytes, .{}) catch unreachable;
         } else if (version > options.version) {
@@ -64,20 +72,26 @@ pub const Database = struct {
         return this;
     }
 
-    pub fn delete(name: []const u8) CrossDBError!void {
+    pub fn delete(allocator: *std.mem.Allocator, appName: []const u8, name: []const u8) CrossDBError!void {
+        const app_data_dir = std.fs.getAppDataDir(allocator, appName) catch return error.Unknown;
+        defer allocator.free(app_data_dir);
+
+        const path = std.fs.path.join(allocator, &.{ app_data_dir, name }) catch return error.Unknown;
+        defer allocator.free(path);
+
         const cwd = std.fs.cwd();
-        cwd.deleteTree(name) catch unreachable;
+        cwd.deleteTree(path) catch return error.Unknown;
     }
 
     pub fn begin(this: *@This(), storeNames: []const []const u8, options: TransactionOptions) CrossDBError!Transaction {
-        const txn = this.env.begin(.{}) catch unreachable;
+        const txn = this.env.begin(.{}) catch return error.Unknown;
         return Transaction{ .env = this.env, .txn = txn };
     }
 
     pub fn createStore(this: *@This(), storeName: [:0]const u8, options: StoreOptions) CrossDBError!void {
-        const txn = this.env.begin(.{}) catch unreachable;
-        _ = txn.use(storeName, .{ .create_if_not_exists = true }) catch unreachable;
-        txn.commit() catch unreachable;
+        const txn = this.env.begin(.{}) catch return error.Unknown;
+        _ = txn.use(storeName, .{ .create_if_not_exists = true }) catch return error.Unknown;
+        txn.commit() catch return error.Unknown;
     }
 };
 
@@ -86,7 +100,7 @@ pub const Transaction = struct {
     txn: lmdb.Transaction,
 
     pub fn commit(this: *@This()) CrossDBError!void {
-        this.txn.commit() catch unreachable;
+        this.txn.commit() catch return error.Unknown;
     }
 
     pub fn store(this: *@This(), storeName: []const u8) CrossDBError!Store {
@@ -113,13 +127,13 @@ pub const Store = struct {
     }
 
     pub fn put(this: *@This(), key: []const u8, value: []const u8) CrossDBError!void {
-        this.txn.put(this.db, key, value, .{}) catch unreachable;
+        this.txn.put(this.db, key, value, .{}) catch return error.Unknown;
     }
 
     pub fn get(this: *@This(), key: []const u8) CrossDBError!?[]const u8 {
         return this.txn.get(this.db, key) catch |err| switch (err) {
             error.NotFound => return null,
-            else => unreachable,
+            else => return error.Unknown,
         };
     }
 };

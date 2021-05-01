@@ -7,7 +7,7 @@ const StoreOptions = crossdb.StoreOptions;
 const TransactionOptions = crossdb.TransactionOptions;
 
 pub const Database = struct {
-    pub fn open(name: []const u8, options: OpenOptions) CrossDBError!@This() {
+    pub fn open(allocator: *std.mem.Allocator, appName: []const u8, name: []const u8, options: OpenOptions) CrossDBError!@This() {
         unreachable;
     }
 

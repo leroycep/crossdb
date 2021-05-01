@@ -190,10 +190,9 @@ export default function getCrossDBEnv(getGlobalInstance) {
             store.put({ key: key, value: val });
         },
 
-        storeGet(storeHandle, frame, keyPtr, keyLen, valOut, valPtr, valLen) {
+        storeGet(storeHandle, framePtr, keyPtr, keyLen, allocator, valOut) {
             const store = getStore(storeHandle);
             const key = new Uint8Array(getMem(), keyPtr, keyLen);
-            const val = new Uint8Array(getMem(), valPtr, valLen);
 
             let request = store.get(key);
             request.onsuccess = (event) => {
@@ -201,13 +200,16 @@ export default function getCrossDBEnv(getGlobalInstance) {
                 let length = 0;
 
                 if (request.result) {
-                    val.set(request.result.value);
-                    valuePtr = valPtr;
+                    // TODO: send error to wasm
                     length = request.result.value.byteLength;
+                    valuePtr = getGlobalInstance().exports.crossdb_alloc(allocator, length);
+
+                    const val = new Uint8Array(getMem(), valuePtr, length);
+                    val.set(request.result.value);
                 }
 
                 getGlobalInstance().exports.crossdb_finish_storeGet(
-                    frame,
+                    framePtr,
                     valOut,
                     valuePtr,
                     length

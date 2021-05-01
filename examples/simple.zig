@@ -6,7 +6,8 @@ pub fn main() void {
     run_frame = async run();
 }
 
-const DB_NAME = "crossdb-example-simple";
+const APP_NAME = "crossdb-example";
+const DB_NAME = "simple";
 
 pub fn run() void {
     run_with_error() catch |e| {
@@ -15,10 +16,13 @@ pub fn run() void {
 }
 
 pub fn run_with_error() !void {
-    // Delete the database to ensure we create it from scratch for demonstration purposes
-    crossdb.Database.delete(DB_NAME) catch |_| {};
+    var gpa = std.heap.GeneralPurposeAllocator(.{ .safety = std.builtin.cpu.arch != .wasm32 }){};
+    defer _ = gpa.deinit();
 
-    var db = try crossdb.Database.open(DB_NAME, .{ .version = 1, .onupgrade = upgrade });
+    // Delete the database to ensure we create it from scratch for demonstration purposes
+    crossdb.Database.delete(&gpa.allocator, APP_NAME, DB_NAME) catch |_| {};
+
+    var db = try crossdb.Database.open(&gpa.allocator, APP_NAME, DB_NAME, .{ .version = 1, .onupgrade = upgrade });
 
     std.log.info("Adding people to people store", .{});
     {

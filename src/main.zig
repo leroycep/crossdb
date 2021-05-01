@@ -2,7 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 pub const CrossDBError = error{
-    Unimplemented,
+    Unknown,
     CannotOpen,
     VersionTooLarge,
     UpgradeFailed,
