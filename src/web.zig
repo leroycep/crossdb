@@ -5,6 +5,8 @@ const CrossDBError = crossdb.CrossDBError;
 const OpenOptions = crossdb.OpenOptions;
 const StoreOptions = crossdb.StoreOptions;
 const TransactionOptions = crossdb.TransactionOptions;
+const CursorOptions = crossdb.CursorOptions;
+const CursorEntry = crossdb.CursorEntry;
 
 pub const Database = struct {
     allocator: *std.mem.Allocator,
@@ -113,6 +115,62 @@ pub const Store = struct {
         this.val_out = val;
         return val;
     }
+
+    pub fn cursor(this: *@This(), options: CursorOptions) CrossDBError!Cursor {
+        var web_cursor: *bindings.WebCursor = undefined;
+        suspend bindings.storeCursor(this.web_store, @ptrToInt(@frame()), &web_cursor);
+
+        return Cursor{
+            .web_cursor = web_cursor,
+            .allocator = this.allocator,
+        };
+    }
+};
+
+pub const Cursor = struct {
+    web_cursor: *bindings.WebCursor,
+    allocator: *std.mem.Allocator,
+    key: ?[]u8 = null,
+    val: ?[]u8 = null,
+
+    pub fn next(this: *@This()) CrossDBError!?CursorEntry {
+        if (this.key) |key| {
+            this.allocator.free(key);
+        }
+        this.key = null;
+        if (this.val) |val| {
+            this.allocator.free(val);
+        }
+        this.val = null;
+
+        var keyPtr: ?[*]u8 = null;
+        var keyLen: usize = undefined;
+        var valPtr: ?[*]u8 = null;
+        var valLen: usize = undefined;
+
+        suspend bindings.cursorContinue(this.web_cursor, @ptrToInt(@frame()), this.allocator, &keyPtr, &keyLen, &valPtr, &valLen);
+
+        if (keyPtr) |key| {
+            this.key = key[0..keyLen];
+            this.val = valPtr.?[0..valLen];
+            return CursorEntry{
+                .key = this.key.?,
+                .val = this.val.?,
+            };
+        } else {
+            return null;
+        }
+    }
+
+    pub fn deinit(this: @This()) void {
+        bindings.cursorDeinit(this.web_cursor);
+        if (this.key) |key| {
+            this.allocator.free(key);
+        }
+        if (this.val) |val| {
+            this.allocator.free(val);
+        }
+    }
 };
 
 export fn crossdb_upgradeNeeded(userdata: usize, database: *bindings.WebDatabase, oldVersion: u32, newVersion: u32) callconv(.C) void {
@@ -153,6 +211,11 @@ export fn crossdb_finish_transactionCommit(framePtr: usize) void {
     resume frame;
 }
 
+export fn crossdb_resume(framePtr: usize) void {
+    const frame = @intToPtr(anyframe, framePtr);
+    resume frame;
+}
+
 const bindings = struct {
     const WebList = opaque {};
     extern "crossdb" fn listInit() *WebList;
@@ -174,4 +237,9 @@ const bindings = struct {
     extern "crossdb" fn storeRelease(store: *WebStore) void;
     extern "crossdb" fn storePut(store: *WebStore, keyPtr: [*]const u8, keyLen: usize, valPtr: [*]const u8, valLen: usize) void;
     extern "crossdb" fn storeGet(store: *WebStore, framePtr: usize, keyPtr: [*]const u8, keyLen: usize, allocator: *std.mem.Allocator, valOut: *?[]u8) void;
+    extern "crossdb" fn storeCursor(store: *WebStore, framePtr: usize, cursorOut: **WebCursor) void;
+
+    const WebCursor = opaque {};
+    extern "crossdb" fn cursorContinue(cursor: *WebCursor, framePtr: usize, allocator: *std.mem.Allocator, keyOutPtr: *?[*]const u8, keyOutLen: *usize, valOutPtr: *?[*]const u8, valOutLen: *usize) void;
+    extern "crossdb" fn cursorDeinit(cursor: *WebCursor) void;
 };

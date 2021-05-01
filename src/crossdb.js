@@ -77,6 +77,28 @@ export default function getCrossDBEnv(getGlobalInstance) {
         delete stores[storeHandle];
     };
 
+    const cursors = {};
+    let next_cursor_id = 1;
+
+    const makeCursorHandle = (cursor) => {
+        const id = next_cursor_id;
+        next_cursor_id += 1;
+        cursors[id] = cursor;
+        return id;
+    };
+
+    const getCursorHandle = (cursorHandle) => {
+        return cursors[cursorHandle];
+    };
+
+    const setCursorHandle = (cursorHandle, cursor) => {
+        cursors[cursorHandle] = cursor;
+    };
+
+    const destroyCursorHandle = (cursorHandle) => {
+        delete cursors[cursorHandle];
+    };
+
     return {
         databaseOpen(namePtr, nameLen, version, frame, userdata, dbout) {
             const name = read_utf8_string(namePtr, nameLen);
@@ -202,7 +224,10 @@ export default function getCrossDBEnv(getGlobalInstance) {
                 if (request.result) {
                     // TODO: send error to wasm
                     length = request.result.value.byteLength;
-                    valuePtr = getGlobalInstance().exports.crossdb_alloc(allocator, length);
+                    valuePtr = getGlobalInstance().exports.crossdb_alloc(
+                        allocator,
+                        length
+                    );
 
                     const val = new Uint8Array(getMem(), valuePtr, length);
                     val.set(request.result.value);
@@ -215,6 +240,77 @@ export default function getCrossDBEnv(getGlobalInstance) {
                     length
                 );
             };
+        },
+
+        storeCursor(storeHandle, framePtr, cursorOutPtr) {
+            const store = getStore(storeHandle);
+
+            const cursorHandle = makeCursorHandle({
+                framePtr,
+                cursor: null,
+            });
+
+            const cursorOut = new Uint32Array(getMem(), cursorOutPtr, 1);
+            cursorOut[0] = cursorHandle;
+
+            let request = store.openCursor();
+            request.onsuccess = (event) => {
+                // Get the frame pointer we should resume to
+                const { framePtr } = getCursorHandle(cursorHandle);
+
+                // Null out the frame pointer and store the cursor for retriving the value in `cursorContinue`
+                setCursorHandle(cursorHandle, {
+                    framePtr: null,
+                    cursor: event.target.result,
+                });
+
+                getGlobalInstance().exports.crossdb_resume(framePtr);
+            };
+        },
+
+        cursorContinue(
+            cursorHandle,
+            framePtr,
+            allocator,
+            keyOutPtrPtr,
+            keyOutLenPtr,
+            valOutPtrPtr,
+            valOutLenPtr
+        ) {
+            const { cursor } = getCursorHandle(cursorHandle);
+            setCursorHandle(cursorHandle, { cursor: null, framePtr });
+            if (cursor) {
+                const key_len =cursor.value.key.byteLength;
+                const val_len =cursor.value.value.byteLength;
+
+                const key_ptr = getGlobalInstance().exports.crossdb_alloc(
+                    allocator,
+                    key_len
+                );
+                const val_ptr = getGlobalInstance().exports.crossdb_alloc(
+                    allocator,
+                    val_len
+                );
+
+                const key = new Uint8Array(getMem(), key_ptr, key_len);
+                const val = new Uint8Array(getMem(), val_ptr, val_len);
+
+                key.set(cursor.value.key);
+                val.set(cursor.value.value);
+
+                new Uint32Array(getMem(), keyOutPtrPtr, 1)[0] = key_ptr;
+                new Uint32Array(getMem(), keyOutLenPtr, 1)[0] = key_len;
+                new Uint32Array(getMem(), valOutPtrPtr, 1)[0] = val_ptr;
+                new Uint32Array(getMem(), valOutLenPtr, 1)[0] = val_len;
+
+                cursor.continue();
+            } else {
+                getGlobalInstance().exports.crossdb_resume(framePtr);
+            }
+        },
+
+        cursorDeinit(cursorHandle) {
+            destroyCursorHandle(cursorHandle);
         },
     };
 }
