@@ -20,6 +20,13 @@ pub const TransactionOptions = struct {
     readonly: bool = false,
 };
 
+pub const CursorOptions = struct {};
+
+pub const CursorEntry = struct {
+    key: []const u8,
+    val: []const u8,
+};
+
 const system = if (builtin.arch == .wasm32) @import("./web.zig") else @import("./lmdb.zig");
 
 pub const Database = system.Database;

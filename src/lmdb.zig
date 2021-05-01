@@ -7,6 +7,8 @@ const CrossDBError = crossdb.CrossDBError;
 const OpenOptions = crossdb.OpenOptions;
 const StoreOptions = crossdb.StoreOptions;
 const TransactionOptions = crossdb.TransactionOptions;
+const CursorOptions = crossdb.CursorOptions;
+const CursorEntry = crossdb.CursorEntry;
 
 pub const Database = struct {
     allocator: *std.mem.Allocator,
@@ -135,5 +137,37 @@ pub const Store = struct {
             error.NotFound => return null,
             else => return error.Unknown,
         };
+    }
+
+    pub fn cursor(this: *@This(), options: CursorOptions) CrossDBError!Cursor {
+        const lmdb_cursor = this.txn.cursor(this.db) catch |err| switch (err) {
+            else => return error.Unknown,
+        };
+        return Cursor{
+            .cursor = lmdb_cursor,
+            .op = .first,
+        };
+    }
+};
+
+pub const Cursor = struct {
+    cursor: lmdb.Cursor,
+    op: lmdb.Cursor.Position,
+
+    pub fn next(this: *@This()) CrossDBError!?CursorEntry {
+        const res = this.cursor.get(this.op) catch return error.Unknown;
+        if (res) |entry| {
+            this.op = .next;
+
+            return Entry{
+                .key = entry.key,
+                .val = entry.val,
+            };
+        }
+        return null;
+    }
+
+    pub fn deinit(this: @This()) void {
+        this.cursor.deinit();
     }
 };

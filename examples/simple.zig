@@ -46,17 +46,35 @@ pub fn run_with_error() !void {
         defer txn.deinit();
 
         var store = try txn.store("people");
+        defer store.release();
         {
             const value = try store.get("fred");
-            std.log.info("fred = {s}", .{value.?});
+            std.log.info("  fred = {s}", .{value.?});
         }
         {
             const value = try store.get("amaryllis");
-            std.log.info("amaryllis = {s}", .{value.?});
+            std.log.info("  amaryllis = {s}", .{value.?});
         }
         {
             const value = try store.get("harry");
-            std.log.info("harry = {s}", .{value});
+            std.log.info("  harry = {s}", .{value});
+        }
+    }
+
+    std.log.info("Iterating over people from people store", .{});
+    {
+        var txn = try db.begin(&.{"people"}, .{ .readonly = true });
+        // We can unconditionally deinit since the transaction won't be writing to the database
+        defer txn.deinit();
+
+        var store = try txn.store("people");
+        defer store.release();
+
+        var cursor = try store.cursor(.{});
+        defer cursor.deinit();
+
+        while (try cursor.next()) |entry| {
+            std.log.info("  {s} = {s}", .{ entry.key, entry.val });
         }
     }
 

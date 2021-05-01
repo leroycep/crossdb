@@ -5,6 +5,8 @@ const CrossDBError = crossdb.CrossDBError;
 const OpenOptions = crossdb.OpenOptions;
 const StoreOptions = crossdb.StoreOptions;
 const TransactionOptions = crossdb.TransactionOptions;
+const CursorOptions = crossdb.CursorOptions;
+const CursorEntry = crossdb.CursorEntry;
 
 pub const Database = struct {
     pub fn open(allocator: *std.mem.Allocator, appName: []const u8, name: []const u8, options: OpenOptions) CrossDBError!@This() {
@@ -49,6 +51,20 @@ pub const Store = struct {
     }
 
     pub fn get(this: *@This(), key: []const u8) CrossDBError!?[]const u8 {
+        unreachable;
+    }
+
+    pub fn cursor(this: *@This(), options: CursorOptions) CrossDBError!Cursor {
+        unreachable;
+    }
+};
+
+pub const Cursor = struct {
+    pub fn next(this: *@This()) CrossDBError!?CursorEntry {
+        unreachable;
+    }
+
+    pub fn deinit(this: @This()) void {
         unreachable;
     }
 };
