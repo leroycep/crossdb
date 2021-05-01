@@ -3,13 +3,14 @@ pkgs:
     version: 0.0.0
 deps:
   lmdb:
+    root: lmdb.zig
     src:
       github:
         user: lithdew
         repo: lmdb-zig
         ref: master
-    root: lmdb.zig
   lmdb_c:
+    root: libraries/liblmdb/mdb.c
     src:
       github:
         user: LMDB

@@ -159,7 +159,7 @@ pub const Cursor = struct {
         if (res) |entry| {
             this.op = .next;
 
-            return Entry{
+            return CursorEntry{
                 .key = entry.key,
                 .val = entry.val,
             };
