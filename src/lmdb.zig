@@ -14,6 +14,7 @@ pub const Database = struct {
     allocator: *std.mem.Allocator,
     env: lmdb.Environment,
     metaDB: lmdb.Database,
+    databases: std.StringHashMap(lmdb.Database),
 
     pub fn open(allocator: *std.mem.Allocator, appName: []const u8, name: []const u8, options: OpenOptions) CrossDBError!@This() {
         const app_data_dir = std.fs.getAppDataDir(allocator, appName) catch return error.Unknown;
@@ -44,6 +45,7 @@ pub const Database = struct {
             .allocator = allocator,
             .env = env,
             .metaDB = metaDB,
+            .databases = std.StringHashMap(lmdb.Database).init(allocator),
         };
 
         const version = get_version: {
@@ -74,6 +76,11 @@ pub const Database = struct {
         return this;
     }
 
+    pub fn deinit(this: *@This()) void {
+        this.databases.deinit();
+        this.env.deinit();
+    }
+
     pub fn delete(allocator: *std.mem.Allocator, appName: []const u8, name: []const u8) CrossDBError!void {
         const app_data_dir = std.fs.getAppDataDir(allocator, appName) catch return error.Unknown;
         defer allocator.free(app_data_dir);
@@ -87,7 +94,7 @@ pub const Database = struct {
 
     pub fn begin(this: *@This(), storeNames: []const []const u8, options: TransactionOptions) CrossDBError!Transaction {
         const txn = this.env.begin(.{}) catch return error.Unknown;
-        return Transaction{ .env = this.env, .txn = txn };
+        return Transaction{ .db = this, .txn = txn };
     }
 
     pub fn createStore(this: *@This(), storeName: [:0]const u8, options: StoreOptions) CrossDBError!void {
@@ -98,19 +105,27 @@ pub const Database = struct {
 };
 
 pub const Transaction = struct {
-    env: lmdb.Environment,
+    db: *Database,
     txn: lmdb.Transaction,
 
     pub fn commit(this: *@This()) CrossDBError!void {
-        this.txn.commit() catch return error.Unknown;
+        this.txn.commit() catch |e| {
+            std.log.err("commit error: {}", .{e});
+            return error.Unknown;
+        };
     }
 
     pub fn store(this: *@This(), storeName: []const u8) CrossDBError!Store {
-        const db = this.txn.use(storeName, .{}) catch |err| switch (err) {
-            error.NotFound => return error.UnknownStore,
-            else => |e| std.debug.panic("Unknown error: {}", .{e}),
-        };
-        return Store{ .env = this.env, .txn = this.txn, .db = db };
+        const gop = this.db.databases.getOrPut(storeName) catch return error.OutOfMemory;
+
+        if (!gop.found_existing) {
+            gop.entry.value = this.txn.use(storeName, .{}) catch |err| switch (err) {
+                error.NotFound => return error.UnknownStore,
+                else => |e| std.debug.panic("Unknown error: {}", .{e}),
+            };
+        }
+
+        return Store{ .txn = this, .db = gop.entry.value };
     }
 
     pub fn deinit(this: @This()) void {
@@ -119,28 +134,25 @@ pub const Transaction = struct {
 };
 
 pub const Store = struct {
-    env: lmdb.Environment,
-    txn: lmdb.Transaction,
+    txn: *Transaction,
     db: lmdb.Database,
 
     /// Remove handle to this store
-    pub fn release(this: @This()) void {
-        this.db.close(this.env);
-    }
+    pub fn release(this: @This()) void {}
 
     pub fn put(this: *@This(), key: []const u8, value: []const u8) CrossDBError!void {
-        this.txn.put(this.db, key, value, .{}) catch return error.Unknown;
+        this.txn.txn.put(this.db, key, value, .{}) catch return error.Unknown;
     }
 
     pub fn get(this: *@This(), key: []const u8) CrossDBError!?[]const u8 {
-        return this.txn.get(this.db, key) catch |err| switch (err) {
+        return this.txn.txn.get(this.db, key) catch |err| switch (err) {
             error.NotFound => return null,
             else => return error.Unknown,
         };
     }
 
     pub fn cursor(this: *@This(), options: CursorOptions) CrossDBError!Cursor {
-        const lmdb_cursor = this.txn.cursor(this.db) catch |err| switch (err) {
+        const lmdb_cursor = this.txn.txn.cursor(this.db) catch |err| switch (err) {
             else => return error.Unknown,
         };
         return Cursor{

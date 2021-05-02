@@ -33,6 +33,10 @@ pub const Database = struct {
         }
     }
 
+    pub fn deinit(this: *@This()) void {
+        bindings.databaseDeinit(this.web_db);
+    }
+
     pub fn delete(allocator: *std.mem.Allocator, appName: []const u8, name: []const u8) CrossDBError!void {
         const db_name = std.fmt.allocPrint(allocator, "{s}_{s}", .{ appName, name }) catch return error.Unknown;
         defer allocator.free(db_name);
@@ -224,6 +228,7 @@ const bindings = struct {
 
     const WebDatabase = opaque {};
     extern "crossdb" fn databaseOpen(namePtr: [*]const u8, nameLen: usize, version: u32, frame: usize, userdata: usize, dbout: *?*WebDatabase) void;
+    extern "crossdb" fn databaseDeinit(db: *WebDatabase) void;
     extern "crossdb" fn databaseDelete(namePtr: [*]const u8, nameLen: usize) void;
     extern "crossdb" fn databaseBegin(db: *WebDatabase, storeNameList: *WebList) ?*WebTransaction;
     extern "crossdb" fn databaseCreateStore(db: *WebDatabase, storeNamePtr: [*]const u8, storeNameLen: usize) void;

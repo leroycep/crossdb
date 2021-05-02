@@ -23,6 +23,7 @@ pub fn run_with_error() !void {
     crossdb.Database.delete(&gpa.allocator, APP_NAME, DB_NAME) catch |_| {};
 
     var db = try crossdb.Database.open(&gpa.allocator, APP_NAME, DB_NAME, .{ .version = 1, .onupgrade = upgrade });
+    defer db.deinit();
 
     std.log.info("Adding people to people store", .{});
     {

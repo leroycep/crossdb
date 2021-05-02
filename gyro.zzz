@@ -9,10 +9,3 @@ deps:
         user: lithdew
         repo: lmdb-zig
         ref: master
-  lmdb_c:
-    root: libraries/liblmdb/mdb.c
-    src:
-      github:
-        user: LMDB
-        repo: lmdb
-        ref: LMDB_0.9.27

@@ -7,6 +7,7 @@ pub const CrossDBError = error{
     VersionTooLarge,
     UpgradeFailed,
     UnknownStore,
+    OutOfMemory,
 };
 
 pub const OpenOptions = struct {

@@ -18,14 +18,7 @@ pub fn build(b: *std.build.Builder) void {
         .path = "src/main.zig",
         .dependencies = &.{ deps.pkgs.lmdb },
     });
-    native.addIncludeDir(deps.base_dirs.lmdb_c ++ "/libraries/liblmdb");
-    native.addCSourceFiles(
-        &.{
-            deps.base_dirs.lmdb_c ++ "/libraries/liblmdb/mdb.c",
-            deps.base_dirs.lmdb_c ++ "/libraries/liblmdb/midl.c",
-        },
-        &.{"-fno-sanitize=undefined"},
-    );
+    native.linkSystemLibrary("lmdb");
     native.linkLibC();
     native.setBuildMode(mode);
     native.setTarget(target);
