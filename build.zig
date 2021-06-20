@@ -36,7 +36,21 @@ pub fn build(b: *std.build.Builder) void {
     web.install();
 
     const copy_simple_html = b.addInstallBinFile(.{ .path = "examples/simple.html" }, "simple.html");
-    const copy_crossdb_js = b.addInstallBinFile(.{ .path = "src/crossdb.js" }, "crossdb.js");
+
+    // Generate JS file and copy it to install dir
+    const generate_js_exe = b.addExecutable("simple", "examples/generate_js.zig");
+    deps.addAllTo(generate_js_exe);
+
+    const generated_dir = b.fmt("{s}/generated", .{b.cache_root});
+    const generate_js = generate_js_exe.run();
+    generate_js.addArg(generated_dir);
+
+    const copy_crossdb_js = b.addInstallDirectory(.{
+        .source_dir = generated_dir,
+        .install_dir = .bin,
+        .install_subdir = "",
+    });
+    copy_crossdb_js.step.dependOn(&generate_js.step);
 
     const build_web = b.step("web", "Build WASM example");
     build_web.dependOn(&web.step);

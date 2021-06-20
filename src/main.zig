@@ -32,3 +32,7 @@ const system = if (builtin.cpu.arch == .wasm32) @import("./web.zig") else @impor
 
 pub const Database = system.Database;
 pub const Transaction = system.Transaction;
+
+pub fn installJS(dir: std.fs.Dir) !void {
+    try dir.writeFile("crossdb.js", @embedFile("crossdb.js"));
+}
