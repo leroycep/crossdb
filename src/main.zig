@@ -28,7 +28,7 @@ pub const CursorEntry = struct {
     val: []const u8,
 };
 
-const system = if (builtin.arch == .wasm32) @import("./web.zig") else @import("./lmdb.zig");
+const system = if (builtin.cpu.arch == .wasm32) @import("./web.zig") else @import("./lmdb.zig");
 
 pub const Database = system.Database;
 pub const Transaction = system.Transaction;

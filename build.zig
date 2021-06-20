@@ -13,15 +13,9 @@ pub fn build(b: *std.build.Builder) void {
     const mode = b.standardReleaseOptions();
 
     const native = b.addExecutable("simple", "examples/simple.zig");
-    native.addPackage(.{
-        .name = "crossdb",
-        .path = "src/main.zig",
-        .dependencies = &.{ deps.pkgs.lmdb },
-    });
-    native.linkSystemLibrary("lmdb");
-    native.linkLibC();
     native.setBuildMode(mode);
     native.setTarget(target);
+    deps.addAllTo(native);
     native.install();
 
     const build_native = b.step("native", "Build native example");
@@ -31,18 +25,18 @@ pub fn build(b: *std.build.Builder) void {
     const native_run_step = b.step("run", "Run native binary");
     native_run_step.dependOn(&native_run.step);
 
-    const web = b.addStaticLibrary("simple", "examples/simple.zig");
+    const web = b.addSharedLibrary("simple", "examples/simple.zig", .unversioned);
     web.addPackagePath("crossdb", "src/main.zig");
     web.setBuildMode(mode);
     web.setTarget(.{
         .cpu_arch = .wasm32,
         .os_tag = .freestanding,
     });
-    web.override_dest_dir = .Bin;
+    web.override_dest_dir = .bin;
     web.install();
 
-    const copy_simple_html = b.addInstallBinFile("examples/simple.html", "simple.html");
-    const copy_crossdb_js = b.addInstallBinFile("src/crossdb.js", "crossdb.js");
+    const copy_simple_html = b.addInstallBinFile(.{ .path = "examples/simple.html" }, "simple.html");
+    const copy_crossdb_js = b.addInstallBinFile(.{ .path = "src/crossdb.js" }, "crossdb.js");
 
     const build_web = b.step("web", "Build WASM example");
     build_web.dependOn(&web.step);

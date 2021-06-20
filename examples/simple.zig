@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const crossdb = @import("crossdb");
 
 var run_frame: @Frame(run) = undefined;
@@ -86,7 +87,7 @@ fn upgrade(db: *crossdb.Database, oldVersion: u32, newVersion: u32) anyerror!voi
     try db.createStore("people", .{});
 }
 
-usingnamespace if (std.builtin.arch == .wasm32) struct {
+usingnamespace if (builtin.cpu.arch == .wasm32) struct {
     // Misc stuff for web support
     extern fn log_write(str_ptr: [*]const u8, str_len: usize) void;
     extern fn log_flush() void;
@@ -110,5 +111,9 @@ usingnamespace if (std.builtin.arch == .wasm32) struct {
         defer log_flush();
         writer.print("[{s}][{s}] ", .{ std.meta.tagName(message_level), std.meta.tagName(scope) }) catch {};
         writer.print(format, args) catch {};
+    }
+
+    pub export fn _start() void {
+        main();
     }
 } else struct {};

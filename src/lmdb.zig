@@ -119,13 +119,13 @@ pub const Transaction = struct {
         const gop = this.db.databases.getOrPut(storeName) catch return error.OutOfMemory;
 
         if (!gop.found_existing) {
-            gop.entry.value = this.txn.use(storeName, .{}) catch |err| switch (err) {
+            gop.value_ptr.* = this.txn.use(storeName, .{}) catch |err| switch (err) {
                 error.NotFound => return error.UnknownStore,
                 else => |e| std.debug.panic("Unknown error: {}", .{e}),
             };
         }
 
-        return Store{ .txn = this, .db = gop.entry.value };
+        return Store{ .txn = this, .db = gop.value_ptr.* };
     }
 
     pub fn deinit(this: @This()) void {
