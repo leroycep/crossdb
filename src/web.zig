@@ -46,6 +46,8 @@ pub const Database = struct {
     }
 
     pub fn begin(this: *@This(), storeNames: []const []const u8, options: TransactionOptions) CrossDBError!Transaction {
+        _ = options;
+
         const store_name_list = bindings.listInit();
         defer bindings.listFree(store_name_list);
         for (storeNames) |storeName| {
@@ -61,6 +63,8 @@ pub const Database = struct {
     }
 
     pub fn createStore(this: *@This(), storeName: []const u8, options: StoreOptions) CrossDBError!void {
+        _ = options;
+
         bindings.databaseCreateStore(this.web_db, storeName.ptr, storeName.len);
     }
 };
@@ -121,6 +125,8 @@ pub const Store = struct {
     }
 
     pub fn cursor(this: *@This(), options: CursorOptions) CrossDBError!Cursor {
+        _ = options;
+
         var web_cursor: *bindings.WebCursor = undefined;
         suspend bindings.storeCursor(this.web_store, @ptrToInt(@frame()), &web_cursor);
 
@@ -188,6 +194,8 @@ export fn crossdb_upgradeNeeded(userdata: usize, database: *bindings.WebDatabase
 }
 
 export fn crossdb_finishOpen(framePtr: usize, userdata: usize, dbout: *?*bindings.WebDatabase, database: ?*bindings.WebDatabase) void {
+    _ = userdata;
+
     dbout.* = database;
 
     const frame = @intToPtr(anyframe, framePtr);

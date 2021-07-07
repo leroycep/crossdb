@@ -21,7 +21,7 @@ pub fn run_with_error() !void {
     defer _ = gpa.deinit();
 
     // Delete the database to ensure we create it from scratch for demonstration purposes
-    crossdb.Database.delete(&gpa.allocator, APP_NAME, DB_NAME) catch |_| {};
+    crossdb.Database.delete(&gpa.allocator, APP_NAME, DB_NAME) catch {};
 
     var db = try crossdb.Database.open(&gpa.allocator, APP_NAME, DB_NAME, .{ .version = 1, .onupgrade = upgrade });
     defer db.deinit();
@@ -84,6 +84,9 @@ pub fn run_with_error() !void {
 }
 
 fn upgrade(db: *crossdb.Database, oldVersion: u32, newVersion: u32) anyerror!void {
+    _ = oldVersion;
+    _ = newVersion;
+
     try db.createStore("people", .{});
 }
 
@@ -93,6 +96,8 @@ usingnamespace if (builtin.cpu.arch == .wasm32) struct {
     extern fn log_flush() void;
 
     fn logWrite(write_context: void, bytes: []const u8) error{}!usize {
+        _ = write_context;
+
         log_write(bytes.ptr, bytes.len);
         return bytes.len;
     }
@@ -113,7 +118,16 @@ usingnamespace if (builtin.cpu.arch == .wasm32) struct {
         writer.print(format, args) catch {};
     }
 
-    pub export fn _start() void {
-        main();
+    comptime {
+        if (builtin.cpu.arch == .wasm32)
+            entrypoint(main);
+    }
+
+    pub fn entrypoint(comptime f: fn () void) void {
+        _ = struct {
+            export fn _start() void {
+                f();
+            }
+        };
     }
 } else struct {};

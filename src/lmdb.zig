@@ -93,11 +93,16 @@ pub const Database = struct {
     }
 
     pub fn begin(this: *@This(), storeNames: []const []const u8, options: TransactionOptions) CrossDBError!Transaction {
+        _ = storeNames;
+        _ = options;
+
         const txn = this.env.begin(.{}) catch return error.Unknown;
         return Transaction{ .db = this, .txn = txn };
     }
 
     pub fn createStore(this: *@This(), storeName: [:0]const u8, options: StoreOptions) CrossDBError!void {
+        _ = options;
+
         const txn = this.env.begin(.{}) catch return error.Unknown;
         _ = txn.use(storeName, .{ .create_if_not_exists = true }) catch return error.Unknown;
         txn.commit() catch return error.Unknown;
@@ -138,7 +143,9 @@ pub const Store = struct {
     db: lmdb.Database,
 
     /// Remove handle to this store
-    pub fn release(this: @This()) void {}
+    pub fn release(this: @This()) void {
+        _ = this;
+    }
 
     pub fn put(this: *@This(), key: []const u8, value: []const u8) CrossDBError!void {
         this.txn.txn.put(this.db, key, value, .{}) catch return error.Unknown;
@@ -152,6 +159,8 @@ pub const Store = struct {
     }
 
     pub fn cursor(this: *@This(), options: CursorOptions) CrossDBError!Cursor {
+        _ = options;
+
         const lmdb_cursor = this.txn.txn.cursor(this.db) catch |err| switch (err) {
             else => return error.Unknown,
         };
