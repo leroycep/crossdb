@@ -11,12 +11,12 @@ const CursorOptions = crossdb.CursorOptions;
 const CursorEntry = crossdb.CursorEntry;
 
 pub const Database = struct {
-    allocator: *std.mem.Allocator,
+    allocator: std.mem.Allocator,
     env: lmdb.Environment,
     metaDB: lmdb.Database,
     databases: std.StringHashMap(lmdb.Database),
 
-    pub fn open(allocator: *std.mem.Allocator, appName: []const u8, name: []const u8, options: OpenOptions) CrossDBError!@This() {
+    pub fn open(allocator: std.mem.Allocator, appName: []const u8, name: []const u8, options: OpenOptions) CrossDBError!@This() {
         const app_data_dir = std.fs.getAppDataDir(allocator, appName) catch return error.Unknown;
         defer allocator.free(app_data_dir);
 
@@ -81,7 +81,7 @@ pub const Database = struct {
         this.env.deinit();
     }
 
-    pub fn delete(allocator: *std.mem.Allocator, appName: []const u8, name: []const u8) CrossDBError!void {
+    pub fn delete(allocator: std.mem.Allocator, appName: []const u8, name: []const u8) CrossDBError!void {
         const app_data_dir = std.fs.getAppDataDir(allocator, appName) catch return error.Unknown;
         defer allocator.free(app_data_dir);
 

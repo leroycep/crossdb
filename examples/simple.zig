@@ -17,13 +17,13 @@ pub fn run() void {
 }
 
 pub fn run_with_error() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{ .safety = std.builtin.cpu.arch != .wasm32 }){};
+    var gpa = std.heap.GeneralPurposeAllocator(.{ .safety = builtin.cpu.arch != .wasm32 }){};
     defer _ = gpa.deinit();
 
     // Delete the database to ensure we create it from scratch for demonstration purposes
-    crossdb.Database.delete(&gpa.allocator, APP_NAME, DB_NAME) catch {};
+    crossdb.Database.delete(gpa.allocator(), APP_NAME, DB_NAME) catch {};
 
-    var db = try crossdb.Database.open(&gpa.allocator, APP_NAME, DB_NAME, .{ .version = 1, .onupgrade = upgrade });
+    var db = try crossdb.Database.open(gpa.allocator(), APP_NAME, DB_NAME, .{ .version = 1, .onupgrade = upgrade });
     defer db.deinit();
 
     std.log.info("Adding people to people store", .{});

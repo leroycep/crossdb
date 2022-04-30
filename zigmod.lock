@@ -1,0 +1,3 @@
+2
+git https://github.com/stiletto/lmdb-zig commit-6f7f839e9e5791c1ec5cd073f420d569404a8777
+git https://git.openldap.org/openldap/openldap tag-LMDB_0.9.29

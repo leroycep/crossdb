@@ -9,11 +9,11 @@ const CursorOptions = crossdb.CursorOptions;
 const CursorEntry = crossdb.CursorEntry;
 
 pub const Database = struct {
-    allocator: *std.mem.Allocator,
+    allocator: std.mem.Allocator,
     web_db: *bindings.WebDatabase,
     options: OpenOptions,
 
-    pub fn open(allocator: *std.mem.Allocator, appName: []const u8, name: []const u8, options: OpenOptions) CrossDBError!@This() {
+    pub fn open(allocator: std.mem.Allocator, appName: []const u8, name: []const u8, options: OpenOptions) CrossDBError!@This() {
         const db_name = std.fmt.allocPrint(allocator, "{s}_{s}", .{ appName, name }) catch return error.Unknown;
         defer allocator.free(db_name);
 
@@ -37,7 +37,7 @@ pub const Database = struct {
         bindings.databaseDeinit(this.web_db);
     }
 
-    pub fn delete(allocator: *std.mem.Allocator, appName: []const u8, name: []const u8) CrossDBError!void {
+    pub fn delete(allocator: std.mem.Allocator, appName: []const u8, name: []const u8) CrossDBError!void {
         const db_name = std.fmt.allocPrint(allocator, "{s}_{s}", .{ appName, name }) catch return error.Unknown;
         defer allocator.free(db_name);
 
@@ -70,7 +70,7 @@ pub const Database = struct {
 };
 
 pub const Transaction = struct {
-    allocator: *std.mem.Allocator,
+    allocator: std.mem.Allocator,
     web_txn: *bindings.WebTransaction,
 
     pub fn commit(this: *@This()) CrossDBError!void {
@@ -92,10 +92,10 @@ pub const Transaction = struct {
 
 pub const Store = struct {
     web_store: *bindings.WebStore,
-    allocator: *std.mem.Allocator,
+    allocator: std.mem.Allocator,
     val_out: ?[]u8 = null,
 
-    pub fn init(allocator: *std.mem.Allocator, store: *bindings.WebStore) !void {
+    pub fn init(allocator: std.mem.Allocator, store: *bindings.WebStore) !void {
         return @This(){
             .allocator = allocator,
             .web_store = store,
@@ -119,7 +119,7 @@ pub const Store = struct {
             this.allocator.free(val_out);
         }
         var val: ?[]u8 = undefined;
-        suspend bindings.storeGet(this.web_store, @ptrToInt(@frame()), key.ptr, key.len, this.allocator, &val);
+        suspend bindings.storeGet(this.web_store, @ptrToInt(@frame()), key.ptr, key.len, &this.allocator, &val);
         this.val_out = val;
         return val;
     }
@@ -139,7 +139,7 @@ pub const Store = struct {
 
 pub const Cursor = struct {
     web_cursor: *bindings.WebCursor,
-    allocator: *std.mem.Allocator,
+    allocator: std.mem.Allocator,
     key: ?[]u8 = null,
     val: ?[]u8 = null,
 
@@ -158,7 +158,7 @@ pub const Cursor = struct {
         var valPtr: ?[*]u8 = null;
         var valLen: usize = undefined;
 
-        suspend bindings.cursorContinue(this.web_cursor, @ptrToInt(@frame()), this.allocator, &keyPtr, &keyLen, &valPtr, &valLen);
+        suspend bindings.cursorContinue(this.web_cursor, @ptrToInt(@frame()), &this.allocator, &keyPtr, &keyLen, &valPtr, &valLen);
 
         if (keyPtr) |key| {
             this.key = key[0..keyLen];
